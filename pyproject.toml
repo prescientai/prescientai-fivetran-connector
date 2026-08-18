@@ -1,0 +1,24 @@
+[project]
+name = "prescient-fivetran-connector"
+version = "0.1.0"
+description = "Fivetran Connector SDK source for the Prescient AI GraphQL API."
+readme = "README.md"
+requires-python = ">=3.10,<3.15"
+# Runtime deps are empty on purpose: Fivetran pre-installs `requests` and the
+# Connector SDK. Declaring them here can conflict with the managed runtime.
+# See https://fivetran.com/docs/connector-sdk/connector-development-and-configuration/project-dependencies
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "fivetran-connector-sdk",
+    "pytest>=8.0",
+    "requests>=2.32",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.uv]
+default-groups = ["dev"]

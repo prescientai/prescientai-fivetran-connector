@@ -1,0 +1,16 @@
+# Local Fivetran secrets — never commit. Copy from configuration.json.example.
+configuration.json
+
+# Fivetran local tester output (`fivetran debug`).
+files/
+warehouse.db
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.ruff_cache/

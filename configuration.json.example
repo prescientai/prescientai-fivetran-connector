@@ -1,0 +1,10 @@
+{
+  "api_token": "replace-with-your-prescient-api-token",
+  "api_url": "https://api.prescientai.com/graphql",
+  "start_date": "2018-01-01",
+  "sales_channel": "all",
+  "sync_modeled_metrics": "true",
+  "sync_reported_metrics": "true",
+  "sync_models": "true",
+  "sync_channel_names": "true"
+}
