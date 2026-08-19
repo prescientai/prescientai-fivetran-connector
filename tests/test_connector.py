@@ -6,8 +6,9 @@ from pathlib import Path
 
 import pytest
 from fivetran_connector_sdk import Logging as sdk_log
+from fivetran_connector_sdk import form_field
 
-from connector import configuration_form, schema
+from connector import configuration_form, connection_test, schema
 
 ROOT = Path(__file__).resolve().parents[1]
 LOG_METHODS = {"info", "warning", "error", "severe", "debug", "critical"}
@@ -31,9 +32,32 @@ def test_schema_declares_tables_and_primary_keys() -> None:
     assert tables["modeled_metrics"]["columns"]["process_date"] == "UTC_DATETIME"
 
 
-def test_configuration_form_builds() -> None:
+def test_configuration_form_matches_sdk_contract() -> None:
     form = configuration_form()
-    assert form is not None
+    fields = {field.name: field for field in form._fields}
+    assert list(fields) == [
+        "api_token",
+        "api_url",
+        "start_date",
+        "sales_channel",
+        "sync_modeled_metrics",
+        "sync_reported_metrics",
+        "sync_models",
+        "sync_channel_names",
+    ]
+    assert fields["api_token"].required is True
+    assert fields["api_token"].text_field == form_field.TextField.password
+    assert fields["api_url"].required is False
+    assert fields["api_url"].text_field == form_field.TextField.plain_text
+    assert fields["sales_channel"].required is True
+    assert fields["sync_modeled_metrics"].HasField("toggle_field")
+    labels_and_names = [(label, func.__name__) for label, func in form._tests]
+    assert labels_and_names == [("Test API connection", "connection_test")]
+
+
+def test_connection_test_does_not_require_table_toggles() -> None:
+    result = connection_test({"api_token": ""})
+    assert result.failure == "Missing required configuration value: 'api_token'"
 
 
 def test_sdk_logging_takes_a_single_message() -> None:

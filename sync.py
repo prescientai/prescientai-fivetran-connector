@@ -4,8 +4,12 @@ Modeled and reported metrics use the API's `processDate` filter — the contract
 recommends it so callers skip unchanged history. Pagination cursors are stored
 in Fivetran state so a failed long sync can resume mid-page.
 
-Dimension tables (`models`, `channel_names`) are small; they are truncated and
-fully replaced each sync so removals show up as `_fivetran_deleted`.
+Dimension tables: `models` is derived from paginated `modeledMetrics.target`
+because the GraphQL `models` field runs `DISTINCT target` over the full
+`ml_attribution_run_outputs` table and hits statement timeout. `channel_names`
+still uses the GraphQL `channelNames` field (`DISTINCT source_channel_name` on
+the same table, tiny cardinality). Models are upserted (not truncated) so an
+incremental window does not wipe names seen on earlier syncs.
 """
 
 from __future__ import annotations
@@ -29,6 +33,7 @@ from mapping import (
     map_model,
     map_modeled_metric,
     map_reported_metric,
+    metric_unit_for_target,
     page_info,
 )
 
@@ -48,6 +53,26 @@ def table_state(state: dict[str, Any], table: str) -> dict[str, Any]:
     return current
 
 
+class ModelCollector:
+    """Upsert model names/units from modeled-metric `target` values.
+
+    Dedupes within a sync so the same target is written once per run.
+    """
+
+    def __init__(self, upsert: Upsert) -> None:
+        self._upsert = upsert
+        self._seen: set[str] = set()
+
+    def observe(self, mapped_row: dict[str, Any]) -> None:
+        name = mapped_row.get("target") or ""
+        if name and name not in self._seen:
+            self._seen.add(name)
+            self._upsert(
+                TABLE_MODELS,
+                map_model({"name": name, "unit": metric_unit_for_target(name)}),
+            )
+
+
 def sync_modeled_metrics(
     client: PrescientClient,
     config: ConnectorConfig,
@@ -56,12 +81,20 @@ def sync_modeled_metrics(
     upsert: Upsert,
     checkpoint: Checkpoint,
     truncate: Truncate | None = None,
+    sync_models: bool = False,
 ) -> None:
+    collector = ModelCollector(upsert) if sync_models else None
+
+    def upsert_modeled(table: str, row: dict[str, Any]) -> None:
+        upsert(table, row)
+        if collector is not None:
+            collector.observe(row)
+
     _sync_metric_pages(
         table=TABLE_MODELED_METRICS,
         config=config,
         state=state,
-        upsert=upsert,
+        upsert=upsert_modeled,
         checkpoint=checkpoint,
         truncate=truncate,
         fetch=lambda after, process_date, start_date, end_date: client.modeled_metrics(
@@ -73,6 +106,9 @@ def sync_modeled_metrics(
         ),
         mapper=map_modeled_metric,
     )
+    if sync_models:
+        table_state(state, TABLE_MODELS)["synced_at"] = utc_today()
+        checkpoint(state)
 
 
 def sync_reported_metrics(
@@ -172,23 +208,6 @@ def _sync_metric_pages(
             f"Next process_date={end_date}"
         )
         return
-
-
-def sync_models(
-    client: PrescientClient,
-    state: dict[str, Any],
-    *,
-    upsert: Upsert,
-    truncate: Truncate,
-    checkpoint: Checkpoint,
-) -> None:
-    rows = client.models()
-    truncate(TABLE_MODELS)
-    for row in rows:
-        upsert(TABLE_MODELS, map_model(row))
-    table_state(state, TABLE_MODELS)["synced_at"] = utc_today()
-    checkpoint(state)
-    log.info(f"Finished {TABLE_MODELS} ({len(rows)} rows)")
 
 
 def sync_channel_names(

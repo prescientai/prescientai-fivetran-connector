@@ -34,13 +34,13 @@ from config import (
     ConfigError,
     ConnectorConfig,
     load_config,
+    normalize_api_url,
 )
 from sync import (
     STATE_VERSION,
     sync_channel_names,
     sync_modeled_metrics,
     sync_reported_metrics,
-    sync_models,
 )
 
 
@@ -160,52 +160,75 @@ def configuration_form() -> ConfigurationForm:
                 form_field.DropdownFieldParam(
                     value=SALES_CHANNEL_ECOMMERCE,
                     label="Ecommerce",
+                    description="Modeled ecommerce output only.",
                 ),
                 form_field.DropdownFieldParam(
                     value=SALES_CHANNEL_RETAIL,
                     label="Retail",
+                    description="Modeled retail output only.",
                 ),
             ],
-            required=False,
+            required=True,
         )
     )
     form.add_field(
         form_field.ToggleField(
             name="sync_modeled_metrics",
             label="Sync modeled metrics",
-            description="Attribution output from modeledMetrics.",
+            description=(
+                "Attribution output from the paginated modeledMetrics query. "
+                "Turn this on in the dashboard (omitted keys default to on)."
+            ),
         )
     )
     form.add_field(
         form_field.ToggleField(
             name="sync_reported_metrics",
             label="Sync reported metrics",
-            description="Campaign spend from reportedMetrics.",
+            description=(
+                "Campaign spend from the paginated reportedMetrics query. "
+                "Turn this on in the dashboard (omitted keys default to on)."
+            ),
         )
     )
     form.add_field(
         form_field.ToggleField(
             name="sync_models",
             label="Sync models",
-            description="Available model names and units.",
+            description=(
+                "Model names and units derived from modeledMetrics.target. "
+                "Requires Sync modeled metrics. Does not call the unpaginated "
+                "GraphQL models query."
+            ),
         )
     )
     form.add_field(
         form_field.ToggleField(
             name="sync_channel_names",
             label="Sync channel names",
-            description="Distinct source channel names.",
+            description=(
+                "Distinct source channel names from the GraphQL channelNames "
+                "query."
+            ),
         )
     )
-    form.add_test(label="Test API connection", func=_connection_test)
+    form.add_test(label="Test API connection", func=connection_test)
     return form
 
 
-def _connection_test(configuration: dict) -> Test:
+def connection_test(configuration: dict) -> Test:
+    """Setup test: validate the token against a date-bounded modeledMetrics call.
+
+    Must accept a configuration dict and return Test().success() or
+    Test().failure(message). Does not require table toggles to be on.
+    """
     test = Test()
     try:
-        config = load_config(configuration)
-        PrescientClient(config.api_url, config.api_token).probe()
+        token = (configuration.get("api_token") or "").strip()
+        if not token:
+            return test.failure("Missing required configuration value: 'api_token'")
+        api_url = normalize_api_url(configuration.get("api_url"))
+        PrescientClient(api_url, token).probe()
     except Exception as exc:
         return test.failure(str(exc).strip() or type(exc).__name__)
     return test.success()
@@ -257,14 +280,6 @@ def _run_sync(
     enabled = set(config.enabled_tables())
     log.info(f"Enabled tables: {', '.join(config.enabled_tables())}")
 
-    if TABLE_MODELS in enabled:
-        sync_models(
-            client,
-            state,
-            upsert=_upsert,
-            truncate=_truncate,
-            checkpoint=_checkpoint,
-        )
     if TABLE_CHANNEL_NAMES in enabled:
         sync_channel_names(
             client,
@@ -281,6 +296,14 @@ def _run_sync(
             upsert=_upsert,
             checkpoint=_checkpoint,
             truncate=_truncate,
+            sync_models=TABLE_MODELS in enabled,
+        )
+    elif TABLE_MODELS in enabled:
+        log.warning(
+            "models is derived from modeledMetrics.target. Enable Sync "
+            "modeled metrics to populate it. The GraphQL models query is not "
+            "called because DISTINCT target on ml_attribution_run_outputs "
+            "hits statement timeout."
         )
     if TABLE_REPORTED_METRICS in enabled:
         sync_reported_metrics(

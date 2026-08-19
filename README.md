@@ -82,7 +82,7 @@ Each Fivetran destination needs its own connection (your token, your warehouse).
 | --- | --- | --- | --- |
 | `modeled_metrics` | `modeledMetrics` | campaign, source channel, reported date, metric, model target, target channel | Incremental via `processDate` |
 | `reported_metrics` | `reportedMetrics` | campaign, channel, reported date | Incremental via `processDate` |
-| `models` | `models` | `name` | Full refresh each sync |
+| `models` | derived from `modeledMetrics.target` | `name` | Upserted during the modeled-metrics sync |
 | `channel_names` | `channelNames` | `name` | Full refresh each sync |
 
 The API is read-only. Schema and query docs: https://api.prescient-ai.io/graphql/docs
@@ -113,15 +113,26 @@ If you change `start_date` or `sales_channel` after a connection has already
 synced, the connector treats that as a new scope: it truncates the metric table
 (soft-delete) and re-runs a full historical pull.
 
-`models` and `channel_names` are small dimension tables. Each sync truncates
-them (soft-delete) and upserts the current set so removals show up as
-`_fivetran_deleted`.
+`models` is derived from `modeledMetrics.target` as those pages are upserted.
+Units follow the public API rule (`_revenue` → `REVENUE`, `_subscription` →
+`SUBSCRIPTIONS`, otherwise `CUSTOMERS`). The table is not truncated, so an
+incremental window does not wipe names seen on earlier syncs. Enable **Sync
+modeled metrics** to populate it. The GraphQL `models` query is not called: it
+runs `DISTINCT target` over `ml_attribution_run_outputs` with no date window
+and hits the warehouse statement timeout.
+
+`channel_names` still comes from the GraphQL `channelNames` query (`DISTINCT
+source_channel_name` on the same table). That cardinality is small, so it
+does not time out the way `models` does. Each sync truncates and upserts the
+current set so removals show up as `_fivetran_deleted`.
 
 ## Configuration
 
 All values are strings — that is a Connector SDK requirement. The same fields
 appear on the Fivetran setup form when you create the connection. A connection
-test probes the `models` query with your token.
+test probes a one-day `modeledMetrics` window with your token. The unpaginated
+GraphQL `models` query is not used: it scans `ml_attribution_run_outputs.target`
+and hits the warehouse statement timeout. `channelNames` is still called.
 
 | Key | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -131,8 +142,8 @@ test probes the `models` query with your token.
 | `sales_channel` | no | `all` | `all`, `ECOMMERCE`, or `RETAIL`. Applies to modeled metrics only. |
 | `sync_modeled_metrics` | no | `true` | Set `false` to skip the table |
 | `sync_reported_metrics` | no | `true` | Set `false` to skip the table |
-| `sync_models` | no | `true` | Set `false` to skip the table |
-| `sync_channel_names` | no | `true` | Set `false` to skip the table |
+| `sync_models` | no | `true` | Set `false` to skip the table. Filled from modeled metrics, not the `models` query. |
+| `sync_channel_names` | no | `true` | Set `false` to skip the table. Uses the GraphQL `channelNames` query. |
 
 ## Test locally (optional)
 

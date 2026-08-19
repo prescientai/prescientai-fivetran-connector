@@ -14,15 +14,19 @@ import requests
 
 from fivetran_connector_sdk import Logging as log
 
+from config import utc_today
 from queries import (
     CHANNEL_NAMES_QUERY,
+    CONNECTION_PROBE_QUERY,
     MODELED_METRICS_QUERY,
-    MODELS_QUERY,
     REPORTED_METRICS_QUERY,
 )
 
 AUTH_FAILED_MESSAGE = "Authentication failed. Check your token."
 DEFAULT_TIMEOUT_SECONDS = 300
+# Setup tests and the pre-sync probe must finish well under Fivetran's test
+# window. The warehouse statement_timeout is 30s; this HTTP cap matches it.
+PROBE_TIMEOUT_SECONDS = 30
 MAX_RETRIES = 5
 MAX_BACKOFF_SECONDS = 60
 
@@ -66,12 +70,12 @@ def _backoff_seconds(attempt: int, response: requests.Response | None) -> float:
     return min(2**attempt, MAX_BACKOFF_SECONDS)
 
 
-def _format_graphql_errors(errors: Any) -> str:
+def _format_graphql_errors(errors: Any, operation_name: str | None) -> str:
     """Turn a GraphQL `errors` array into a dashboard-readable string.
 
-    Yoga's maskError rewrites unexpected failures as a plain Error. GraphQL
-    serializes that as `{}` (no enumerable `message`), which is what clients
-    see as "GraphQL error: {}".
+    Yoga's maskError rewrites unexpected failures (including warehouse
+    statement timeouts) as a plain Error. GraphQL serializes that as `{}`
+    (no enumerable `message`), which Fivetran then logs as `[{}]`.
     """
     dumped = json.dumps(errors, default=str)
     messages: list[str] = []
@@ -89,10 +93,12 @@ def _format_graphql_errors(errors: Any) -> str:
                 messages.append(json.dumps(extras, default=str))
     if messages:
         return "; ".join(messages)
+    op = operation_name or "the query"
     if dumped in ("[{}]", "{}", "[]"):
         return (
             f"{dumped} — Prescient masked an internal API error (no message). "
-            "Reproduce with POST /graphql query Models and check API/server logs."
+            f"Common cause is a warehouse statement timeout on {op}. "
+            "Check API/server logs for 'canceling statement due to statement timeout'."
         )
     return dumped
 
@@ -171,7 +177,7 @@ def graphql(
 
     errors = body.get("errors") or []
     if errors:
-        messages = _format_graphql_errors(errors)
+        messages = _format_graphql_errors(errors, operation_name)
         op_label = operation_name or "request"
         if AUTH_FAILED_MESSAGE.lower() in messages.lower():
             raise PrescientAuthError(AUTH_FAILED_MESSAGE)
@@ -207,6 +213,7 @@ class PrescientClient:
         query: str,
         variables: dict[str, Any] | None = None,
         operation_name: str | None = None,
+        timeout: int | None = None,
     ) -> dict[str, Any]:
         return graphql(
             api_url=self.api_url,
@@ -214,13 +221,28 @@ class PrescientClient:
             query=query,
             variables=compact_variables(variables or {}),
             operation_name=operation_name,
-            timeout=self.timeout,
+            timeout=self.timeout if timeout is None else timeout,
             session=self.session,
         )
 
     def probe(self) -> None:
-        """Fail-fast auth check used by setup tests and the start of a sync."""
-        self._query(MODELS_QUERY, operation_name="Models")
+        """Fail-fast auth check used by setup tests and the start of a sync.
+
+        Uses a one-day `modeledMetrics` window. The unpaginated `models` query
+        DISTINCT-scans `ml_attribution_run_outputs.target` and hits statement
+        timeout; Yoga then masks that as `{}`.
+        """
+        today = utc_today()
+        self._query(
+            CONNECTION_PROBE_QUERY,
+            {
+                "startDate": today,
+                "endDate": today,
+                "processDate": today,
+            },
+            operation_name="ConnectionProbe",
+            timeout=PROBE_TIMEOUT_SECONDS,
+        )
 
     def modeled_metrics(
         self,
@@ -270,16 +292,10 @@ class PrescientClient:
             raise PrescientApiError("reportedMetrics response was not an object.")
         return payload
 
-    def models(self) -> list[dict[str, Any]]:
-        data = self._query(MODELS_QUERY, operation_name="Models")
-        rows = data.get("models")
-        if not isinstance(rows, list):
-            raise PrescientApiError("models response was not a list.")
-        return rows
-
     def channel_names(self) -> list[str]:
         data = self._query(CHANNEL_NAMES_QUERY, operation_name="ChannelNames")
         names = data.get("channelNames")
         if not isinstance(names, list):
             raise PrescientApiError("channelNames response was not a list.")
         return [str(name) for name in names]
+
