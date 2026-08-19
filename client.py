@@ -7,6 +7,7 @@ See docs/graphql-api.md and https://api.prescient-ai.io/graphql/docs.
 from __future__ import annotations
 
 from typing import Any
+import json
 import time
 
 import requests
@@ -63,6 +64,37 @@ def _backoff_seconds(attempt: int, response: requests.Response | None) -> float:
             except ValueError:
                 pass
     return min(2**attempt, MAX_BACKOFF_SECONDS)
+
+
+def _format_graphql_errors(errors: Any) -> str:
+    """Turn a GraphQL `errors` array into a dashboard-readable string.
+
+    Yoga's maskError rewrites unexpected failures as a plain Error. GraphQL
+    serializes that as `{}` (no enumerable `message`), which is what clients
+    see as "GraphQL error: {}".
+    """
+    dumped = json.dumps(errors, default=str)
+    messages: list[str] = []
+    if isinstance(errors, list):
+        for err in errors:
+            if not isinstance(err, dict):
+                messages.append(str(err))
+                continue
+            message = err.get("message")
+            if message:
+                messages.append(str(message))
+                continue
+            extras = {key: value for key, value in err.items() if key != "message"}
+            if extras:
+                messages.append(json.dumps(extras, default=str))
+    if messages:
+        return "; ".join(messages)
+    if dumped in ("[{}]", "{}", "[]"):
+        return (
+            f"{dumped} — Prescient masked an internal API error (no message). "
+            "Reproduce with POST /graphql query Models and check API/server logs."
+        )
+    return dumped
 
 
 def graphql(
@@ -139,12 +171,11 @@ def graphql(
 
     errors = body.get("errors") or []
     if errors:
-        messages = "; ".join(
-            str(err.get("message") or err) for err in errors if isinstance(err, dict)
-        ) or str(errors)
+        messages = _format_graphql_errors(errors)
+        op_label = operation_name or "request"
         if AUTH_FAILED_MESSAGE.lower() in messages.lower():
             raise PrescientAuthError(AUTH_FAILED_MESSAGE)
-        raise PrescientApiError(f"GraphQL error: {messages}")
+        raise PrescientApiError(f"GraphQL error on {op_label}: {messages}")
 
     data = body.get("data")
     if not isinstance(data, dict):
