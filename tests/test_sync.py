@@ -9,7 +9,6 @@ from config import load_config
 from sync import (
     sync_channel_names,
     sync_modeled_metrics,
-    sync_models,
     table_state,
 )
 
@@ -18,7 +17,6 @@ class FakeClient:
     def __init__(self, pages: list[dict[str, Any]]) -> None:
         self.pages = list(pages)
         self.calls: list[dict[str, Any]] = []
-        self.model_rows = [{"name": "orders", "unit": "CUSTOMERS"}]
         self.channels = ["GOOGLE_ADS", "META"]
 
     def modeled_metrics(self, **kwargs):
@@ -26,9 +24,6 @@ class FakeClient:
         if not self.pages:
             raise AssertionError("Unexpected modeled_metrics call")
         return self.pages.pop(0)
-
-    def models(self):
-        return self.model_rows
 
     def channel_names(self):
         return self.channels
@@ -238,17 +233,77 @@ def test_sales_channel_change_is_a_scope_reset(
     assert client.calls[0]["sales_channels"] == ("RETAIL",)
 
 
-def test_dimension_tables_truncate_then_upsert() -> None:
+def test_modeled_metrics_derives_models(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("sync.utc_today", lambda: "2026-08-18")
+    client = FakeClient(
+        [
+            {
+                "data": [
+                    {
+                        "sourceCampaignId": "a",
+                        "sourceChannelName": "GOOGLE_ADS",
+                        "reportedDate": "2026-08-01",
+                        "metricName": "FIRST_ORDER_REVENUE",
+                        "metricValue": 1,
+                        "processDate": "2026-08-02T00:00:00Z",
+                        "target": "shopify_revenue",
+                        "targetChannelName": None,
+                    },
+                    {
+                        "sourceCampaignId": "b",
+                        "sourceChannelName": "GOOGLE_ADS",
+                        "reportedDate": "2026-08-01",
+                        "metricName": "FIRST_ORDER_CONVERSIONS",
+                        "metricValue": 2,
+                        "processDate": "2026-08-02T00:00:00Z",
+                        "target": "shopify_revenue",
+                        "targetChannelName": None,
+                    },
+                    {
+                        "sourceCampaignId": "c",
+                        "sourceChannelName": "META",
+                        "reportedDate": "2026-08-01",
+                        "metricName": "FIRST_ORDER_CONVERSIONS",
+                        "metricValue": 3,
+                        "processDate": "2026-08-02T00:00:00Z",
+                        "target": "new_customers",
+                        "targetChannelName": None,
+                    },
+                ],
+                "pageInfo": {"endCursor": None, "hasNextPage": False},
+            }
+        ]
+    )
+    upserts: list[tuple[str, dict[str, Any]]] = []
+    truncated: list[str] = []
+
+    sync_modeled_metrics(
+        client,  # type: ignore[arg-type]
+        _config(),
+        {},
+        upsert=lambda table, row: upserts.append((table, row)),
+        checkpoint=lambda *_args: None,
+        truncate=lambda table: truncated.append(table),
+        sync_models=True,
+    )
+
+    assert truncated == []
+    tables = [table for table, _row in upserts]
+    assert tables.count("modeled_metrics") == 3
+    model_rows = [row for table, row in upserts if table == "models"]
+    assert {row["name"]: row["unit"] for row in model_rows} == {
+        "shopify_revenue": "REVENUE",
+        "new_customers": "CUSTOMERS",
+    }
+    assert all(table != "channel_names" for table, _row in upserts)
+
+
+def test_channel_names_truncate_then_upsert() -> None:
     client = FakeClient([])
     ops: list[tuple[str, Any]] = []
 
-    sync_models(
-        client,  # type: ignore[arg-type]
-        {},
-        upsert=lambda table, row: ops.append(("upsert", table, row)),
-        truncate=lambda table: ops.append(("truncate", table)),
-        checkpoint=lambda _state: ops.append(("checkpoint",)),
-    )
     sync_channel_names(
         client,  # type: ignore[arg-type]
         {},
@@ -257,7 +312,5 @@ def test_dimension_tables_truncate_then_upsert() -> None:
         checkpoint=lambda _state: ops.append(("checkpoint",)),
     )
 
-    assert ops[0] == ("truncate", "models")
-    assert ops[1][0] == "upsert" and ops[1][2]["name"] == "orders"
-    assert ops[3] == ("truncate", "channel_names")
-    assert {ops[4][2]["name"], ops[5][2]["name"]} == {"GOOGLE_ADS", "META"}
+    assert ops[0] == ("truncate", "channel_names")
+    assert {ops[1][2]["name"], ops[2][2]["name"]} == {"GOOGLE_ADS", "META"}

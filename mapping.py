@@ -41,10 +41,27 @@ def map_reported_metric(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def metric_unit_for_target(target: str) -> str:
+    """Match `metricUnitForTarget` in the public GraphQL API.
+
+    lowercased name includes '_revenue'      -> REVENUE
+    lowercased name includes '_subscription' -> SUBSCRIPTIONS
+    otherwise                                -> CUSTOMERS
+    """
+    name = target.lower()
+    if "_revenue" in name:
+        return "REVENUE"
+    if "_subscription" in name:
+        return "SUBSCRIPTIONS"
+    return "CUSTOMERS"
+
+
 def map_model(row: dict[str, Any]) -> dict[str, Any]:
+    name = coalesce_pk(row.get("name"))
+    unit = row.get("unit") or metric_unit_for_target(name)
     return {
-        "name": coalesce_pk(row.get("name")),
-        "unit": row.get("unit"),
+        "name": name,
+        "unit": unit,
     }
 
 

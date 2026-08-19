@@ -5,6 +5,7 @@ from mapping import (
     map_model,
     map_modeled_metric,
     map_reported_metric,
+    metric_unit_for_target,
     page_info,
 )
 
@@ -54,7 +55,17 @@ def test_model_and_channel_mapping() -> None:
         "name": "orders",
         "unit": "CUSTOMERS",
     }
+    assert map_model({"name": "new_customers_revenue"}) == {
+        "name": "new_customers_revenue",
+        "unit": "REVENUE",
+    }
     assert map_channel_name("GOOGLE_ADS") == {"name": "GOOGLE_ADS"}
+
+
+def test_metric_unit_for_target_matches_api_rule() -> None:
+    assert metric_unit_for_target("shopify_revenue") == "REVENUE"
+    assert metric_unit_for_target("First_Order_Subscriptions") == "SUBSCRIPTIONS"
+    assert metric_unit_for_target("new_customers") == "CUSTOMERS"
 
 
 def test_page_info_stringifies_cursor() -> None:

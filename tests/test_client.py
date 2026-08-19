@@ -8,6 +8,7 @@ import requests
 
 from client import (
     AUTH_FAILED_MESSAGE,
+    PROBE_TIMEOUT_SECONDS,
     PrescientApiError,
     PrescientAuthError,
     PrescientClient,
@@ -15,7 +16,7 @@ from client import (
     compact_variables,
     graphql,
 )
-from queries import MODELS_QUERY
+from queries import CONNECTION_PROBE_QUERY
 
 
 class FakeResponse:
@@ -69,9 +70,21 @@ def test_after_cursor_is_json_string_not_number() -> None:
     assert f'"{cursor}"' in encoded
 
 
-def test_auth_header_uses_apikey_scheme() -> None:
+def test_auth_header_uses_apikey_scheme(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("client.utc_today", lambda: "2026-08-19")
     session = FakeSession(
-        [FakeResponse(200, {"data": {"models": [{"name": "revenue", "unit": "REVENUE"}]}})]
+        [
+            FakeResponse(
+                200,
+                {
+                    "data": {
+                        "modeledMetrics": {
+                            "pageInfo": {"hasNextPage": False},
+                        }
+                    }
+                },
+            )
+        ]
     )
     client = PrescientClient(
         "https://api.prescient-ai.io/graphql",
@@ -79,8 +92,31 @@ def test_auth_header_uses_apikey_scheme() -> None:
         session=session,  # type: ignore[arg-type]
     )
     client.probe()
-    headers = session.calls[0]["headers"]
+    call = session.calls[0]
+    headers = call["headers"]
     assert headers["Authorization"] == "apikey tok_test"
+    body = call["json"]
+    assert body["operationName"] == "ConnectionProbe"
+    assert body["query"] == CONNECTION_PROBE_QUERY
+    assert body["variables"] == {
+        "startDate": "2026-08-19",
+        "endDate": "2026-08-19",
+        "processDate": "2026-08-19",
+    }
+    assert call["timeout"] == PROBE_TIMEOUT_SECONDS
+    assert "models" not in body["query"]
+
+
+def test_graphql_empty_error_object_explains_masking() -> None:
+    session = FakeSession([FakeResponse(200, {"data": None, "errors": [{}]})])
+    with pytest.raises(PrescientApiError, match="masked an internal API error"):
+        graphql(
+            api_url="https://example.test/graphql",
+            api_token="tok",
+            query=CONNECTION_PROBE_QUERY,
+            operation_name="Models",
+            session=session,  # type: ignore[arg-type]
+        )
 
 
 def test_http_401_is_auth_error() -> None:
@@ -89,7 +125,7 @@ def test_http_401_is_auth_error() -> None:
         graphql(
             api_url="https://example.test/graphql",
             api_token="bad",
-            query=MODELS_QUERY,
+            query=CONNECTION_PROBE_QUERY,
             session=session,  # type: ignore[arg-type]
         )
 
@@ -102,7 +138,7 @@ def test_graphql_auth_error_in_200_body() -> None:
         graphql(
             api_url="https://example.test/graphql",
             api_token="bad",
-            query=MODELS_QUERY,
+            query=CONNECTION_PROBE_QUERY,
             session=session,  # type: ignore[arg-type]
         )
 
@@ -112,16 +148,16 @@ def test_retries_429_then_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
     session = FakeSession(
         [
             FakeResponse(429, headers={"Retry-After": "0"}),
-            FakeResponse(200, {"data": {"models": []}}),
+            FakeResponse(200, {"data": {"ok": True}}),
         ]
     )
     data = graphql(
         api_url="https://example.test/graphql",
         api_token="tok",
-        query=MODELS_QUERY,
+        query=CONNECTION_PROBE_QUERY,
         session=session,  # type: ignore[arg-type]
     )
-    assert data == {"models": []}
+    assert data == {"ok": True}
     assert len(session.calls) == 2
 
 
@@ -135,7 +171,7 @@ def test_exhausted_retries_raise_transient(monkeypatch: pytest.MonkeyPatch) -> N
         graphql(
             api_url="https://example.test/graphql",
             api_token="tok",
-            query=MODELS_QUERY,
+            query=CONNECTION_PROBE_QUERY,
             session=session,  # type: ignore[arg-type]
         )
 
@@ -146,22 +182,10 @@ def test_http_400_is_not_retryable() -> None:
         graphql(
             api_url="https://example.test/graphql",
             api_token="tok",
-            query=MODELS_QUERY,
+            query=CONNECTION_PROBE_QUERY,
             session=session,  # type: ignore[arg-type]
         )
     assert len(session.calls) == 1
-
-
-def test_graphql_empty_error_object_explains_masking() -> None:
-    session = FakeSession([FakeResponse(200, {"data": None, "errors": [{}]})])
-    with pytest.raises(PrescientApiError, match="masked an internal API error"):
-        graphql(
-            api_url="https://example.test/graphql",
-            api_token="tok",
-            query=MODELS_QUERY,
-            operation_name="Models",
-            session=session,  # type: ignore[arg-type]
-        )
 
 
 def test_graphql_application_error() -> None:
@@ -172,7 +196,7 @@ def test_graphql_application_error() -> None:
         graphql(
             api_url="https://example.test/graphql",
             api_token="tok",
-            query=MODELS_QUERY,
+            query=CONNECTION_PROBE_QUERY,
             session=session,  # type: ignore[arg-type]
         )
 
