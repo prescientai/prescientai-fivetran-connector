@@ -152,6 +152,18 @@ def test_http_400_is_not_retryable() -> None:
     assert len(session.calls) == 1
 
 
+def test_graphql_empty_error_object_explains_masking() -> None:
+    session = FakeSession([FakeResponse(200, {"data": None, "errors": [{}]})])
+    with pytest.raises(PrescientApiError, match="masked an internal API error"):
+        graphql(
+            api_url="https://example.test/graphql",
+            api_token="tok",
+            query=MODELS_QUERY,
+            operation_name="Models",
+            session=session,  # type: ignore[arg-type]
+        )
+
+
 def test_graphql_application_error() -> None:
     session = FakeSession(
         [FakeResponse(200, {"data": None, "errors": [{"message": "boom"}]})]
