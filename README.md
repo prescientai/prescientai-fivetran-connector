@@ -45,15 +45,17 @@ it with `uv run` (or `source .venv/bin/activate` first):
 ```bash
 uv run fivetran deploy \
   --api-key "$FIVETRAN_API_KEY" \
-  --destination <YOUR_DESTINATION_NAME> \
+  --destination Snowflake \
   --connection prescient_ai \
   --configuration configuration.json \
   --python 3.12
 ```
 
-Connection names must be lowercase (`a-z`, digits, `_`). The new connection is
-**paused** after deploy — open it in the Fivetran dashboard and unpause it to
-start the historical sync.
+`--destination` is the exact name from the Fivetran Destinations page (case
+matters; `Snowflake` is valid). `--connection` is a name you choose and must
+be lowercase (`a-z`, digits, `_`). The new connection is **paused** after
+deploy — open it in the Fivetran dashboard and unpause it to start the
+historical sync.
 
 Do not commit `configuration.json`. Fivetran encrypts the values after deploy;
 you can delete the local file once the connection exists.
@@ -67,7 +69,7 @@ updates. Omit `--configuration` to keep the token already stored in Fivetran:
 git pull
 uv run fivetran deploy \
   --api-key "$FIVETRAN_API_KEY" \
-  --destination <YOUR_DESTINATION_NAME> \
+  --destination Snowflake \
   --connection prescient_ai \
   --python 3.12
 ```
