@@ -74,7 +74,7 @@ def test_auth_header_uses_apikey_scheme() -> None:
         [FakeResponse(200, {"data": {"models": [{"name": "revenue", "unit": "REVENUE"}]}})]
     )
     client = PrescientClient(
-        "https://api.prescientai.com/graphql",
+        "https://api.prescient-ai.io/graphql",
         "tok_test",
         session=session,  # type: ignore[arg-type]
     )

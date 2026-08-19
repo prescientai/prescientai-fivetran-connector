@@ -85,7 +85,7 @@ Each Fivetran destination needs its own connection (your token, your warehouse).
 | `models` | `models` | `name` | Full refresh each sync |
 | `channel_names` | `channelNames` | `name` | Full refresh each sync |
 
-The API is read-only. Schema and query docs: https://api.prescientai.com/graphql/docs
+The API is read-only. Schema and query docs: https://api.prescient-ai.io/graphql/docs
 
 Auth header if you call the API yourself:
 
@@ -126,7 +126,7 @@ test probes the `models` query with your token.
 | Key | Required | Default | Description |
 | --- | --- | --- | --- |
 | `api_token` | yes | — | Prescient API token |
-| `api_url` | no | `https://api.prescientai.com/graphql` | GraphQL endpoint. Must be `https://` (`http://` is allowed only for localhost). A host without `/graphql` is accepted. |
+| `api_url` | no | `https://api.prescient-ai.io/graphql` | GraphQL endpoint. Must be `https://` (`http://` is allowed only for localhost). A host without `/graphql` is accepted. |
 | `start_date` | no | `2018-01-01` | Inclusive `reported_date` lower bound (`YYYY-MM-DD`) |
 | `sales_channel` | no | `all` | `all`, `ECOMMERCE`, or `RETAIL`. Applies to modeled metrics only. |
 | `sync_modeled_metrics` | no | `true` | Set `false` to skip the table |

@@ -2,7 +2,7 @@
 
 The schema is a frozen contract. Field names, pagination, and argument types
 must stay aligned with `app/api/graphql/schema.graphql` in the platform repo
-(and https://api.prescientai.com/graphql/docs).
+(and https://api.prescient-ai.io/graphql/docs).
 
 `after` is a GraphQL `BigInt` encoded as a decimal *string*. Modeled-metric
 cursors are warehouse ids that exceed JavaScript's safe integer range, so the

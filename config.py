@@ -12,7 +12,7 @@ from typing import Any
 from urllib.parse import urlparse
 import re
 
-DEFAULT_API_URL = "https://api.prescientai.com/graphql"
+DEFAULT_API_URL = "https://api.prescient-ai.io/graphql"
 DEFAULT_START_DATE = "2018-01-01"
 ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
