@@ -241,7 +241,7 @@ def update(configuration: dict, state: dict) -> None:
 
     client = PrescientClient(config.api_url, config.api_token)
     try:
-        log.info("Probing Prescient API at %s", config.api_url)
+        log.info(f"Probing Prescient API at {config.api_url}")
         client.probe()
         _run_sync(client, config, state)
     except PrescientAuthError as exc:
@@ -256,7 +256,7 @@ def _run_sync(
     state: dict,
 ) -> None:
     enabled = set(config.enabled_tables())
-    log.info("Enabled tables: %s", ", ".join(config.enabled_tables()))
+    log.info(f"Enabled tables: {', '.join(config.enabled_tables())}")
 
     if TABLE_MODELS in enabled:
         sync_models(

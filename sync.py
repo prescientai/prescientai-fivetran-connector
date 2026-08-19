@@ -118,10 +118,7 @@ def _sync_metric_pages(
     stored_scope = current.get("scope")
     if stored_scope is not None and stored_scope != fingerprint:
         log.info(
-            "Sync scope changed for %s (%s -> %s); full resync",
-            table,
-            stored_scope,
-            fingerprint,
+            f"Sync scope changed for {table} ({stored_scope} -> {fingerprint}); full resync"
         )
         if truncate is not None:
             truncate(table)
@@ -144,12 +141,8 @@ def _sync_metric_pages(
         current["window_process_date"] = process_date
 
     log.info(
-        "Syncing %s start_date=%s end_date=%s process_date=%s after=%s",
-        table,
-        start_date,
-        end_date,
-        process_date,
-        after,
+        f"Syncing {table} start_date={start_date} end_date={end_date} "
+        f"process_date={process_date} after={after}"
     )
 
     page_count = 0
@@ -176,11 +169,8 @@ def _sync_metric_pages(
         current.pop("window_process_date", None)
         checkpoint(state)
         log.info(
-            "Finished %s (%s pages, %s rows). Next process_date=%s",
-            table,
-            page_count,
-            row_count,
-            end_date,
+            f"Finished {table} ({page_count} pages, {row_count} rows). "
+            f"Next process_date={end_date}"
         )
         return
 
@@ -199,7 +189,7 @@ def sync_models(
         upsert(TABLE_MODELS, map_model(row))
     table_state(state, TABLE_MODELS)["synced_at"] = utc_today()
     checkpoint(state)
-    log.info("Finished %s (%s rows)", TABLE_MODELS, len(rows))
+    log.info(f"Finished {TABLE_MODELS} ({len(rows)} rows)")
 
 
 def sync_channel_names(
@@ -216,4 +206,4 @@ def sync_channel_names(
         upsert(TABLE_CHANNEL_NAMES, map_channel_name(name))
     table_state(state, TABLE_CHANNEL_NAMES)["synced_at"] = utc_today()
     checkpoint(state)
-    log.info("Finished %s (%s rows)", TABLE_CHANNEL_NAMES, len(names))
+    log.info(f"Finished {TABLE_CHANNEL_NAMES} ({len(names)} rows)")
