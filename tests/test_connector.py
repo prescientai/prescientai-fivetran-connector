@@ -4,12 +4,13 @@ import ast
 import inspect
 from pathlib import Path
 
+import pytest
 from fivetran_connector_sdk import Logging as sdk_log
 
 from connector import configuration_form, schema
 
 ROOT = Path(__file__).resolve().parents[1]
-LOG_METHODS = {"info", "warning", "error", "severe", "debug"}
+LOG_METHODS = {"info", "warning", "error", "severe", "debug", "critical"}
 
 
 def test_schema_declares_tables_and_primary_keys() -> None:
@@ -60,3 +61,30 @@ def test_project_log_calls_pass_a_single_message() -> None:
             if len(node.args) != 1:
                 violations.append(f"{path.name}:{node.lineno} {ast.unparse(node)}")
     assert violations == []
+
+
+def test_update_reports_failures_with_a_dashboard_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, str | None] = {}
+
+    class BoomClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def probe(self) -> None:
+            raise RuntimeError("probe exploded")
+
+    def fake_error(*, message: str, trace: str | None = None) -> None:
+        captured["message"] = message
+        captured["trace"] = trace
+
+    monkeypatch.setattr("connector.PrescientClient", BoomClient)
+    monkeypatch.setattr("connector.op.error", fake_error)
+    monkeypatch.setattr("connector.log.critical", lambda _message: None)
+
+    from connector import update
+
+    update({"api_token": "tok"}, {})
+    assert captured["message"] == "probe exploded"
+    assert captured["trace"] and "RuntimeError" in captured["trace"]

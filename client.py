@@ -7,10 +7,11 @@ See docs/graphql-api.md and https://api.prescient-ai.io/graphql/docs.
 from __future__ import annotations
 
 from typing import Any
-import logging
 import time
 
 import requests
+
+from fivetran_connector_sdk import Logging as log
 
 from queries import (
     CHANNEL_NAMES_QUERY,
@@ -18,8 +19,6 @@ from queries import (
     MODELS_QUERY,
     REPORTED_METRICS_QUERY,
 )
-
-log = logging.getLogger("prescient.fivetran")
 
 AUTH_FAILED_MESSAGE = "Authentication failed. Check your token."
 DEFAULT_TIMEOUT_SECONDS = 300

@@ -13,14 +13,14 @@ See:
 from __future__ import annotations
 
 import json
-import logging
+import traceback
 
 from fivetran_connector_sdk import Connector
 from fivetran_connector_sdk import Logging as log
 from fivetran_connector_sdk import Operations as op
 from fivetran_connector_sdk import ConfigurationForm, Test, form_field
 
-from client import PrescientAuthError, PrescientClient, PrescientApiError
+from client import PrescientClient
 from config import (
     DEFAULT_API_URL,
     DEFAULT_START_DATE,
@@ -42,8 +42,6 @@ from sync import (
     sync_reported_metrics,
     sync_models,
 )
-
-logging.basicConfig(level=logging.INFO)
 
 
 def schema(configuration: dict) -> list[dict]:
@@ -208,8 +206,8 @@ def _connection_test(configuration: dict) -> Test:
     try:
         config = load_config(configuration)
         PrescientClient(config.api_url, config.api_token).probe()
-    except (ConfigError, PrescientAuthError, PrescientApiError) as exc:
-        return test.failure(str(exc))
+    except Exception as exc:
+        return test.failure(str(exc).strip() or type(exc).__name__)
     return test.success()
 
 
@@ -233,7 +231,7 @@ def update(configuration: dict, state: dict) -> None:
     try:
         config = load_config(configuration)
     except ConfigError as exc:
-        op.error(str(exc))
+        op.error(message=str(exc))
         return
 
     state = dict(state or {})
@@ -244,10 +242,11 @@ def update(configuration: dict, state: dict) -> None:
         log.info(f"Probing Prescient API at {config.api_url}")
         client.probe()
         _run_sync(client, config, state)
-    except PrescientAuthError as exc:
-        op.error(str(exc), trace=str(exc))
-    except PrescientApiError as exc:
-        op.error(f"Prescient API error: {exc}", trace=str(exc))
+    except Exception as exc:
+        message = str(exc).strip() or type(exc).__name__
+        trace = traceback.format_exc()
+        log.critical(f"Sync failed: {message}")
+        op.error(message=message, trace=trace)
 
 
 def _run_sync(

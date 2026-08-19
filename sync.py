@@ -12,7 +12,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Any
-import logging
+
+from fivetran_connector_sdk import Logging as log
 
 from client import PrescientClient
 from config import (
@@ -30,8 +31,6 @@ from mapping import (
     map_reported_metric,
     page_info,
 )
-
-log = logging.getLogger("prescient.fivetran")
 
 Upsert = Callable[[str, dict[str, Any]], None]
 Checkpoint = Callable[[dict[str, Any]], None]
