@@ -13,6 +13,9 @@ from urllib.parse import urlparse
 import re
 
 DEFAULT_API_URL = "https://api.prescient-ai.io/graphql"
+# Connections deployed with the first README still store this host in Fivetran.
+LEGACY_API_HOST = "api.prescientai.com"
+CANONICAL_API_HOST = "api.prescient-ai.io"
 DEFAULT_START_DATE = "2018-01-01"
 ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -67,6 +70,7 @@ def _is_loopback_host(host: str | None) -> bool:
 
 def normalize_api_url(value: str | None) -> str:
     url = (value or "").strip() or DEFAULT_API_URL
+    url = url.replace(LEGACY_API_HOST, CANONICAL_API_HOST)
     url = url.rstrip("/")
     if not url.endswith("/graphql"):
         url = f"{url}/graphql"
