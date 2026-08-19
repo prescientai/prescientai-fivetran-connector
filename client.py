@@ -121,11 +121,8 @@ def graphql(
             if _is_retryable(exc, retry_response) and attempt < MAX_RETRIES:
                 wait = _backoff_seconds(attempt, retry_response)
                 log.warning(
-                    "Prescient API call failed (attempt %s/%s): %s. Retrying in %.1fs.",
-                    attempt + 1,
-                    MAX_RETRIES + 1,
-                    exc,
-                    wait,
+                    f"Prescient API call failed (attempt {attempt + 1}/"
+                    f"{MAX_RETRIES + 1}): {exc}. Retrying in {wait:.1f}s."
                 )
                 time.sleep(wait)
                 continue
