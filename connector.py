@@ -7,7 +7,7 @@ channel names.
 
 See:
   https://fivetran.com/docs/connector-sdk
-  https://api.prescientai.com/graphql/docs
+  https://api.prescient-ai.io/graphql/docs
 """
 
 from __future__ import annotations

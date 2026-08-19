@@ -1,7 +1,7 @@
 """HTTP client for the Prescient AI GraphQL API.
 
 Auth header is the public contract: `Authorization: apikey <token>`.
-See docs/graphql-api.md and https://api.prescientai.com/graphql/docs.
+See docs/graphql-api.md and https://api.prescient-ai.io/graphql/docs.
 """
 
 from __future__ import annotations

@@ -26,13 +26,13 @@ def test_requires_api_token() -> None:
 
 
 def test_normalizes_api_url_without_graphql_suffix() -> None:
-    config = load_config(_base(api_url="https://api.prescientai.com"))
+    config = load_config(_base(api_url="https://api.prescient-ai.io"))
     assert config.api_url == DEFAULT_API_URL
 
 
 def test_rejects_plaintext_remote_http() -> None:
     with pytest.raises(ConfigError, match="https"):
-        load_config(_base(api_url="http://api.prescientai.com/graphql"))
+        load_config(_base(api_url="http://api.prescient-ai.io/graphql"))
 
 
 def test_allows_http_loopback_for_local_debug() -> None:
@@ -42,7 +42,7 @@ def test_allows_http_loopback_for_local_debug() -> None:
 
 def test_rejects_missing_scheme() -> None:
     with pytest.raises(ConfigError, match="https"):
-        load_config(_base(api_url="api.prescientai.com/graphql"))
+        load_config(_base(api_url="api.prescient-ai.io/graphql"))
 
 
 def test_invalid_start_date() -> None:
