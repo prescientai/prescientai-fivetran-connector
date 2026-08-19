@@ -13,7 +13,7 @@ only need a Prescient API token.
 - A Fivetran account with a destination already set up
 - A Fivetran API key ([how to create one](https://fivetran.com/docs/rest-api/getting-started))
 - A Prescient API token (Prescient dashboard → **Settings → API**)
-- Python 3.10–3.14 and [pip](https://pip.pypa.io/en/stable/)
+- Python 3.10–3.14 and [uv](https://docs.astral.sh/uv/)
 
 Tokens can be scoped to a subset of channels. The connector inherits that
 scope; it does not widen access.
@@ -24,8 +24,7 @@ scope; it does not widen access.
 git clone https://github.com/prescientai/prescientai-fivetran-connector.git
 cd prescientai-fivetran-connector
 
-python3 -m pip install fivetran-connector-sdk
-
+uv sync
 cp configuration.json.example configuration.json
 ```
 
@@ -33,9 +32,19 @@ Edit `configuration.json` and set `api_token` to your Prescient API token.
 Leave the other keys unless you want to change the historical start date,
 sales channel, or skip a table.
 
+`--api-key` is **not** the raw Fivetran key. It is the base64 encoding of
+`{api_key}:{api_secret}` (Fivetran shows both when you create the key):
+
 ```bash
-fivetran deploy \
-  --api-key <BASE_64_ENCODED_FIVETRAN_API_KEY> \
+export FIVETRAN_API_KEY="$(printf '%s' 'YOUR_KEY:YOUR_SECRET' | base64)"
+```
+
+The CLI lives in the project virtualenv. `uv pip install` is not enough — run
+it with `uv run` (or `source .venv/bin/activate` first):
+
+```bash
+uv run fivetran deploy \
+  --api-key "$FIVETRAN_API_KEY" \
   --destination <YOUR_DESTINATION_NAME> \
   --connection prescient_ai \
   --configuration configuration.json \
@@ -56,8 +65,8 @@ updates. Omit `--configuration` to keep the token already stored in Fivetran:
 
 ```bash
 git pull
-fivetran deploy \
-  --api-key <BASE_64_ENCODED_FIVETRAN_API_KEY> \
+uv run fivetran deploy \
+  --api-key "$FIVETRAN_API_KEY" \
   --destination <YOUR_DESTINATION_NAME> \
   --connection prescient_ai \
   --python 3.12
