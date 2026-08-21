@@ -30,6 +30,13 @@ def test_normalizes_api_url_without_graphql_suffix() -> None:
     assert config.api_url == DEFAULT_API_URL
 
 
+def test_rewrites_legacy_prescientai_com_host() -> None:
+    config = load_config(_base(api_url="https://api.prescientai.com/graphql"))
+    assert config.api_url == DEFAULT_API_URL
+    config = load_config(_base(api_url="https://api.prescientai.com"))
+    assert config.api_url == DEFAULT_API_URL
+
+
 def test_rejects_plaintext_remote_http() -> None:
     with pytest.raises(ConfigError, match="https"):
         load_config(_base(api_url="http://api.prescient-ai.io/graphql"))
